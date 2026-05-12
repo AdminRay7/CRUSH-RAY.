@@ -1,36 +1,63 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestWaWebVersion } = require('@whiskeysockets/baileys');
 const P = require('pino');
 const { Boom } = require('@hapi/boom');
-const mongoose = require('mongoose');
 const fs = require('fs-extra');
 const path = require('path');
-const readline = require('readline');
-const handler = require('./handler');
+const dns = require('dns');
 
 // ==================== CONFIGURATION ====================
 let config = {};
 try { config = require('./config'); } catch { config = {}; }
 
-// MongoDB Connection
-const MONGODB_URI = config.mongodbUri || 'mongodb://localhost:27017/insidious_bot';
+console.log('📁 Using file-based storage');
+console.log('🌐 Testing network connectivity...\n');
 
-mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}).then(() => {
-    console.log('✅ MongoDB Connected Successfully');
-}).catch(err => {
-    console.error('❌ MongoDB Connection Error:', err.message);
-    process.exit(1);
-});
+// Test network connectivity
+async function testNetwork() {
+    console.log('🔍 Testing network connection to WhatsApp...');
+    
+    // Test DNS resolution
+    dns.lookup('web.whatsapp.com', (err, address) => {
+        if (err) {
+            console.error('❌ DNS Resolution Failed:', err.message);
+        } else {
+            console.log('✅ DNS Resolution OK:', address);
+        }
+    });
+    
+    // Test direct connection
+    const https = require('https');
+    const options = {
+        hostname: 'web.whatsapp.com',
+        port: 443,
+        path: '/',
+        method: 'HEAD',
+        timeout: 5000
+    };
+    
+    const req = https.request(options, (res) => {
+        console.log('✅ HTTPS Connection OK - Status:', res.statusCode);
+    });
+    
+    req.on('error', (err) => {
+        console.error('❌ HTTPS Connection Failed:', err.message);
+    });
+    
+    req.on('timeout', () => {
+        console.error('❌ Connection Timeout - Please check firewall settings');
+        req.destroy();
+    });
+    
+    req.end();
+}
 
-// Create readline interface for CLI input
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
+// ==================== PAIRING SETUP ====================
+const PAIRING_NUMBER = process.env.PAIRING_NUMBER || config.pairingNumber || '254794376595';
+let pairingCodeRequested = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 20;
 
-// ==================== BOT INSTANCE MANAGER ====================
+// ==================== BOT INSTANCE ====================
 class BotInstance {
     constructor(sessionName = 'default') {
         this.sessionName = sessionName;
@@ -40,231 +67,242 @@ class BotInstance {
     }
 
     async start() {
-        console.log(`\n🚀 Starting INSIDIOUS Bot...`);
+        console.log(`\n🚀 Starting CRUSH RAY Bot...`);
         console.log(`📁 Session: ${this.sessionName}`);
+        console.log(`📱 Phone Number: +${PAIRING_NUMBER}`);
+        console.log(`🔄 Attempt: ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS}`);
         
         const sessionDir = path.join(__dirname, 'sessions', this.sessionName);
         await fs.ensureDir(sessionDir);
+        
+        // Check if session exists
+        const credsFile = path.join(sessionDir, 'creds.json');
+        const hasSession = await fs.pathExists(credsFile);
+        console.log(`💾 Session exists: ${hasSession ? 'YES' : 'NO'}`);
+        
+        // Get latest version
+        const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015901307], isLatest: true }));
+        console.log(`📡 WhatsApp Web Version: ${version.join('.')}`);
         
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
         
         this.conn = makeWASocket({
             auth: state,
-            printQRInTerminal: false, // Disable QR, use pairing code
+            printQRInTerminal: false,
             logger: P({ level: 'silent' }),
-            browser: Browsers.macOS('Safari'),
-            defaultQueryTimeoutMs: 10000,
+            browser: ['CRUSH RAY', 'Chrome', '2.1.1'],
+            defaultQueryTimeoutMs: 120000,
             keepAliveIntervalMs: 30000,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            patchMessageBeforeSending: (message) => {
-                const requireCheck = (message.messageContextInfo || {})?.deviceListMetadata;
-                if (requireCheck) {
-                    message = { ...message, messageContextInfo: undefined };
+            connectTimeoutMs: 60000,
+            version: version,
+            waitForKeepAliveBeforeConnect: true,
+            generateHighQualityLinkPreview: false,
+            patchMessageBeforeSending: (message) => message,
+            options: {
+                waWebOptions: {
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
-                return message;
             }
         });
         
         this.conn.ev.on('creds.update', saveCreds);
         
-        // Handle connection updates with pairing code
+        // Handle connection updates
         this.conn.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr, isNewLogin } = update;
+            const { connection, lastDisconnect, qr } = update;
             
-            // Request pairing code if not registered
-            if (!this.conn.authState.creds.registered && !this.pairingRequested) {
-                this.pairingRequested = true;
+            console.log(`📡 Connection state: ${connection || 'unknown'}`);
+            
+            // Request pairing code when connection opens
+            if (connection === 'open' && !this.conn.authState.creds.registered && !pairingCodeRequested) {
+                pairingCodeRequested = true;
                 await this.requestPairingCode();
             }
             
             if (connection === 'close') {
-                const statusCode = (lastDisconnect?.error instanceof Boom) ? 
-                    lastDisconnect.error.output.statusCode : 500;
+                const error = lastDisconnect?.error;
+                const statusCode = error instanceof Boom ? error.output.statusCode : 500;
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                
+                console.log(`❌ Connection closed. Status: ${statusCode}, Error: ${errorMessage}`);
                 
                 if (statusCode !== DisconnectReason.loggedOut) {
-                    console.log('🔄 Connection closed. Reconnecting in 5 seconds...');
-                    setTimeout(() => this.start(), 5000);
+                    reconnectAttempts++;
+                    
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        const delay = Math.min(10000 * reconnectAttempts, 60000);
+                        console.log(`🔄 Reconnecting in ${delay/1000} seconds...`);
+                        setTimeout(() => {
+                            this.conn?.ws?.close();
+                            this.start();
+                        }, delay);
+                    } else {
+                        console.log(`❌ Max reconnection attempts reached.`);
+                        console.log(`💡 Try clearing sessions: npm run clear\n`);
+                        process.exit(1);
+                    }
                 } else {
-                    console.log('🔒 Session logged out. Please restart bot to pair again.');
-                    process.exit(0);
+                    console.log('🔒 Session logged out. Please restart with --clear flag.');
                 }
             } else if (connection === 'open') {
                 this.isConnected = true;
                 this.botNumber = this.conn.user.id.split(':')[0];
-                console.log(`\n✅ Bot Connected Successfully!`);
+                reconnectAttempts = 0;
+                console.log(`\n✅========== CRUSH RAY CONNECTED! ==========`);
                 console.log(`📱 Bot Number: ${this.botNumber}`);
-                console.log(`🌐 Status: ${this.isConnected ? 'ONLINE' : 'OFFLINE'}`);
-                
-                // Initialize bot handler
-                await handler.init(this.conn);
-                
-                // Send startup message to owners
+                console.log(`🟢 Status: ONLINE`);
+                console.log(`==========================================\n`);
                 await this.sendStartupMessage();
-                
-                // Setup CLI commands
-                this.setupCliCommands();
             }
+        });
+        
+        // Handle connection errors
+        this.conn.ev.on('connection.error', (err) => {
+            console.error('🔌 Connection error:', err.message);
         });
         
         // Handle messages
         this.conn.ev.on('messages.upsert', async (m) => {
-            await handler(this.conn, m);
-        });
-        
-        // Handle group updates
-        this.conn.ev.on('group-participants.update', async (update) => {
-            await handler.handleGroupUpdate(this.conn, update);
-        });
-        
-        // Handle calls
-        this.conn.ev.on('call', async (call) => {
-            await handler.handleCall(this.conn, call);
-        });
-        
-        // Handle presence updates (optional)
-        this.conn.ev.on('presence.update', async (update) => {
-            // You can add presence tracking here if needed
+            await this.handleMessage(m);
         });
     }
     
     async requestPairingCode() {
-        return new Promise((resolve) => {
-            rl.question('\n📱 Enter your WhatsApp number with country code (e.g., 255787069580): ', async (number) => {
-                const cleanNumber = number.replace(/[^0-9]/g, '');
-                
-                if (!cleanNumber || cleanNumber.length < 10) {
-                    console.log('❌ Invalid number format. Please include country code.');
-                    return this.requestPairingCode();
+        const cleanNumber = PAIRING_NUMBER.replace(/[^0-9]/g, '');
+        
+        console.log(`\n📡 Requesting pairing code for +${cleanNumber}...`);
+        
+        // Wait for socket to be ready
+        for (let i = 0; i < 5; i++) {
+            if (this.conn?.ws?.readyState === 1) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            console.log(`⏳ Waiting for socket... (${i+1}/5)`);
+        }
+        
+        if (this.conn?.ws?.readyState !== 1) {
+            console.log('❌ Socket not ready. Retrying in 10 seconds...');
+            pairingCodeRequested = false;
+            setTimeout(() => this.start(), 10000);
+            return;
+        }
+        
+        try {
+            const code = await this.conn.requestPairingCode(cleanNumber);
+            
+            console.log(`\n╔═══════════════════════════════════════════════╗`);
+            console.log(`║                                           ║`);
+            console.log(`║      🔐 PAIRING CODE: ${code}      ║`);
+            console.log(`║                                           ║`);
+            console.log(`╚═══════════════════════════════════════════════╝\n`);
+            console.log(`📱 HOW TO CONNECT:`);
+            console.log(`   1. Open WhatsApp → Settings → Linked Devices`);
+            console.log(`   2. Tap "Link a Device"`);
+            console.log(`   3. Tap "Link with phone number instead"`);
+            console.log(`   4. Enter: ${code}`);
+            console.log(`\n✅ Bot will connect once you enter the code!\n`);
+            
+        } catch (error) {
+            console.error(`❌ Pairing error: ${error.message}`);
+            
+            if (error.message.includes('timeout')) {
+                console.log(`⚠️ Connection timeout - Check if port 443 is open`);
+            } else if (error.message.includes('ECONNREFUSED')) {
+                console.log(`⚠️ Connection refused - Firewall blocking?`);
+            }
+            
+            console.log(`\n🔄 Retrying in 15 seconds...\n`);
+            pairingCodeRequested = false;
+            setTimeout(() => {
+                if (!this.isConnected) {
+                    this.conn?.ws?.close();
                 }
-                
-                console.log(`📡 Requesting pairing code for +${cleanNumber}...`);
-                
-                try {
-                    const code = await this.conn.requestPairingCode(cleanNumber);
-                    console.log(`\n🔐 =====================================`);
-                    console.log(`🔐 YOUR PAIRING CODE: ${code}`);
-                    console.log(`🔐 =====================================\n`);
-                    console.log(`📱 Instructions:`);
-                    console.log(`   1. Open WhatsApp on your phone`);
-                    console.log(`   2. Go to Settings → Linked Devices`);
-                    console.log(`   3. Tap "Link a Device" → "Link with phone number"`);
-                    console.log(`   4. Enter this 8-digit code: ${code}`);
-                    console.log(`\n⏳ Waiting for connection...\n`);
-                    resolve(code);
-                } catch (error) {
-                    console.error(`❌ Failed to get pairing code: ${error.message}`);
-                    console.log('💡 Make sure your number is valid and WhatsApp is accessible.');
-                    this.pairingRequested = false;
-                    setTimeout(() => this.requestPairingCode(), 5000);
-                }
-                rl.close();
-            });
-        });
+            }, 15000);
+        }
+    }
+    
+    async handleMessage(m) {
+        try {
+            if (!m.messages?.[0]) return;
+            const msg = m.messages[0];
+            const from = msg.key.remoteJid;
+            const body = msg.message?.conversation || 
+                        msg.message?.extendedTextMessage?.text || '';
+            
+            if (body === '.ping' || body === '!ping') {
+                await this.conn.sendMessage(from, { text: '🏓 Pong! CRUSH RAY is crushing it! 💪' });
+            }
+            
+            if (body === '.help' || body === '!help') {
+                await this.conn.sendMessage(from, { 
+                    text: `⚡ CRUSH RAY BOT ⚡\n\nCommands:\n.ping - Check bot status\n.help - Show this menu\n\nStatus: ONLINE ✅\nDeveloper: Stanley Assanaly` 
+                });
+            }
+        } catch (err) {
+            console.error('Message error:', err.message);
+        }
     }
     
     async sendStartupMessage() {
         const owners = config.ownerNumber || [];
-        const botNumber = this.botNumber;
-        
         for (const owner of owners) {
             try {
-                const ownerJid = owner + '@s.whatsapp.net';
-                const startupMsg = `
-╭━━━━━━━━━━━━━━╮
-   ✅ *INSIDIOUS BOT ONLINE*
-╰━━━━━━━━━━━━━━╯
-
-🤖 *Bot Info:*
-• Name: INSIDIOUS: THE LAST KEY
-• Number: ${botNumber}
-• Version: 2.1.1
-• Status: ONLINE ✅
-
-📊 *System Info:*
-• Uptime: Just Started
-• Memory: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB
-• Platform: ${process.platform}
-
-👑 *Developer:* Stanley Assanaly
-📱 *Contact:* +255787069580
-
-⚡ *All systems operational!*
-                `;
-                await this.conn.sendMessage(ownerJid, { text: startupMsg.trim() });
+                await this.conn.sendMessage(owner + '@s.whatsapp.net', { 
+                    text: `✅ CRUSH RAY is ONLINE!\n📱 Number: ${this.botNumber}\n💪 Ready to crush!` 
+                });
+                console.log(`📨 Startup message sent to ${owner}`);
             } catch (error) {
-                console.log(`Failed to send startup message to ${owner}:`, error.message);
+                console.log(`❌ Could not send startup message to ${owner}`);
             }
         }
     }
-    
-    setupCliCommands() {
-        const cli = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            prompt: `🤖 [${this.botNumber}]> `
-        });
-        
-        cli.prompt();
-        
-        cli.on('line', async (input) => {
-            const cmd = input.trim().toLowerCase();
-            
-            switch(cmd) {
-                case 'status':
-                    console.log(`\n📊 Bot Status:`);
-                    console.log(`   Number: ${this.botNumber}`);
-                    console.log(`   Status: ${this.isConnected ? 'ONLINE ✅' : 'OFFLINE ❌'}`);
-                    console.log(`   Uptime: ${Math.floor(process.uptime())} seconds`);
-                    console.log(`   Memory: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB\n`);
-                    break;
-                    
-                case 'help':
-                    console.log(`\n📚 Available Commands:`);
-                    console.log(`   status - Show bot status`);
-                    console.log(`   logout - Logout current session`);
-                    console.log(`   restart - Restart bot`);
-                    console.log(`   help   - Show this menu`);
-                    console.log(`   exit   - Stop bot\n`);
-                    break;
-                    
-                case 'logout':
-                    console.log(`🔒 Logging out...`);
-                    await this.conn.logout();
-                    process.exit(0);
-                    break;
-                    
-                case 'restart':
-                    console.log(`🔄 Restarting bot...`);
-                    process.exit(0);
-                    break;
-                    
-                case 'exit':
-                    console.log(`👋 Shutting down...`);
-                    process.exit(0);
-                    break;
-                    
-                default:
-                    if (cmd) console.log(`❌ Unknown command. Type 'help' for options.`);
-            }
-            
-            cli.prompt();
-        });
-        
-        cli.on('close', () => {
-            console.log('\n👋 Goodbye!');
-            process.exit(0);
-        });
-    }
 }
 
-// ==================== MULTI-BOT MANAGER ====================
-class BotManager {
-    constructor() {
-        this.bots = new Map();
+// ==================== MAIN ====================
+async function main() {
+    console.log(`\n╔════════════════════════════════════════════╗`);
+    console.log(`║         CRUSH RAY - WhatsApp Bot        ║`);
+    console.log(`║              Version 2.1.1               ║`);
+    console.log(`║        Developed by Stanley Assanaly     ║`);
+    console.log(`╚════════════════════════════════════════════╝\n`);
+    
+    // Run network test
+    await testNetwork();
+    
+    // Clear sessions if flag is set
+    if (process.argv.includes('--clear')) {
+        const sessionsDir = path.join(__dirname, 'sessions');
+        await fs.remove(sessionsDir);
+        console.log('🗑️ Cleared all sessions!\n');
     }
     
-    async addBot(sessionName) {
+    const sessionName = process.env.SESSION_NAME || 'default';
+    const bot = new BotInstance(sessionName);
+    
+    await bot.start();
+    
+    // Keep alive
+    setInterval(() => {
+        if (bot.isConnected) {
+            console.log(`💓 CRUSH RAY | ${new Date().toLocaleTimeString()}`);
+        }
+    }, 60000);
+}
+
+// Handle process errors
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err.message);
+});
+
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err.message);
+});
+
+// ==================== START ====================
+main().catch(console.error);
+
+module.exports = { BotInstance };onName) {
         if (this.bots.has(sessionName)) {
             console.log(`❌ Bot "${sessionName}" already exists.`);
             return false;
