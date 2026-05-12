@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>CRUSH RAY · WhatsApp Bot Pairing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* subtle modern feel, still selectable */
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
+            font-family: 'Inter', 'Segoe UI', 'Poppins', system-ui, -apple-system, 'Roboto', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        /* main glass card */
+        .pair-card {
+            max-width: 520px;
+            width: 100%;
+            background: rgba(12, 18, 28, 0.75);
+            backdrop-filter: blur(16px);
+            border-radius: 3rem;
+            border: 1px solid rgba(75, 130, 200, 0.25);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(66, 153, 225, 0.1) inset;
+            padding: 2rem 1.8rem 2rem 1.8rem;
+            transition: all 0.2s ease;
+        }
+
+        /* header section */
+        .bot-header {
+            text-align: center;
+            margin-bottom: 1.6rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            background: #1e293b;
+            border-radius: 100px;
+            padding: 0.3rem 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+            border: 0.5px solid #334155;
+        }
+
+        h1 {
+            font-size: 2.1rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #F0F9FF, #B9E0FF, #5F9EFF);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.2);
+        }
+
+        .version {
+            font-size: 0.8rem;
+            color: #5f7f9e;
+            background: #0f172ad9;
+            display: inline-block;
+            padding: 0.2rem 0.8rem;
+            border-radius: 40px;
+            margin-top: 0.5rem;
+            font-family: monospace;
+        }
+
+        .sub {
+            color: #9ab3d0;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            font-weight: 400;
+            border-left: 2px solid #2d4a7c;
+            padding-left: 0.75rem;
+            text-align: left;
+            display: inline-block;
+        }
+
+        /* pairing instructions */
+        .pair-meta {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 2rem;
+            padding: 0.8rem 1.2rem;
+            margin: 1.6rem 0 1.5rem 0;
+            border: 1px solid #2c3e55;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .badge-icon {
+            background: #0e2a38;
+            padding: 0.2rem 0.7rem;
+            border-radius: 50px;
+            color: #7bc5ff;
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        /* form layout */
+        .input-group {
+            margin-bottom: 1.8rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            color: #9bbbe0;
+            margin-bottom: 0.55rem;
+        }
+
+        .phone-input-wrapper {
+            display: flex;
+            align-items: center;
+            background: #0f1622e6;
+            border-radius: 2.2rem;
+            border: 1.5px solid #2c3f58;
+            transition: all 0.2s;
+            backdrop-filter: blur(4px);
+        }
+        .phone-input-wrapper:focus-within {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59,130,246,0.3);
+        }
+        .country-code {
+            background: #1e2a3e;
+            padding: 0.8rem 1rem;
+            border-radius: 2rem 0 0 2rem;
+            font-weight: 600;
+            font-family: monospace;
+            font-size: 1rem;
+            color: #cbd5e6;
+            border-right: 1px solid #334155;
+        }
+        .phone-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 0.85rem 1rem;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #eef4ff;
+            outline: none;
+            font-family: monospace;
+            letter-spacing: 0.3px;
+        }
+        .phone-input::placeholder {
+            color: #4b6589;
+            font-weight: 400;
+            font-size: 0.85rem;
+        }
+
+        /* pairing button */
+        .pair-btn {
+            width: 100%;
+            background: linear-gradient(95deg, #1f3b62, #0e2a48);
+            border: none;
+            padding: 1rem;
+            border-radius: 3rem;
+            font-weight: 700;
+            font-size: 1.1rem;
+            font-family: inherit;
+            color: #eef5ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4);
+            border: 0.5px solid #3a658b;
+        }
+        .pair-btn:hover {
+            background: linear-gradient(95deg, #2a4a78, #123456);
+            transform: scale(0.98);
+            box-shadow: 0 3px 8px black;
+        }
+        .pair-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* pairing code display (8-digit) */
+        .result-section {
+            margin-top: 2rem;
+            background: #050b12b3;
+            border-radius: 2rem;
+            padding: 1.2rem;
+            text-align: center;
+            backdrop-filter: blur(8px);
+            border: 1px solid #2b4b6e;
+            transition: all 0.3s ease;
+        }
+        .code-label {
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            font-weight: 500;
+            color: #80b2e0;
+            margin-bottom: 0.5rem;
+        }
+        .pairing-code {
+            font-size: 2.4rem;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: #010a12;
+            padding: 0.7rem 0.2rem;
+            border-radius: 2rem;
+            letter-spacing: 8px;
+            color: #e0f2fe;
+            border: 1px solid #2d638b;
+            word-break: break-all;
+            margin: 0.5rem 0;
+        }
+        .info-message {
+            font-size: 0.75rem;
+            color: #7c9bc2;
+            margin-top: 0.6rem;
+        }
+        .error-message {
+            color: #ffaa88;
+            background: #3c1e1a60;
+            border-radius: 2rem;
+            padding: 0.6rem;
+            font-size: 0.8rem;
+        }
+        .footer {
+            margin-top: 1.8rem;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #3a618b;
+            border-top: 1px dashed #1f3c57;
+            padding-top: 1.2rem;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #9ac6ff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-icon {
+            font-size: 1.2rem;
+        }
+        /* small responsive */
+        @media (max-width: 480px) {
+            .pair-card { padding: 1.5rem; }
+            .pairing-code { font-size: 1.7rem; letter-spacing: 4px; }
+            h1 { font-size: 1.6rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="pair-card">
+    <div class="bot-header">
+        <div class="badge">
+            ⚡ CRUSH RAY · THE LAST KEY
+        </div>
+        <h1>WHATSAPP BOT<br>PAIRING SYSTEM</h1>
+        <div class="version">⚙️ PAIRING MODULE  •  v2.1.1</div>
+        <div class="sub" style="margin-top: 12px;">🔐 secure 8-digit session pairing</div>
+    </div>
+
+    <div class="pair-meta">
+        <span class="badge-icon">📱 WHATSAPP WEB</span>
+        <span>🔁 QR-less pairing</span>
+        <span>⚡ 8-digit code</span>
+    </div>
+
+    <!-- phone number form -->
+    <div class="input-group">
+        <label>📞 ENTER WHATSAPP NUMBER WITH COUNTRY CODE</label>
+        <div class="phone-input-wrapper">
+            <span class="country-code">+</span>
+            <input type="tel" id="phoneNumber" class="phone-input" placeholder="255712345678" value="255712345678" autocomplete="off">
+        </div>
+        <div style="font-size: 0.7rem; margin-top: 6px; color:#4f7ea3;">✓ example: 2557xxxxxx (Tanzania) or any valid format</div>
+    </div>
+
+    <button id="pairButton" class="pair-btn">
+        <span class="btn-icon">🔑</span> 
+        <span>GET 8-DIGIT PAIRING CODE</span>
+        <span class="btn-icon">⚡</span>
+    </button>
+
+    <!-- dynamic pairing code output -->
+    <div id="pairingResultArea" class="result-section" style="display: none;">
+        <div class="code-label">✦ PAIRING CODE (ONE TIME) ✦</div>
+        <div id="pairCodeDisplay" class="pairing-code">——————</div>
+        <div class="info-message" id="pairInstructions">
+            ⚠️ Open WhatsApp → Settings → Linked Devices → Link with code<br>
+            ➕ Enter this 8-digit code within 4 minutes
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>&lt;/&gt; DEVELOPED BY RYAN KE © 2025</span>
+        <span>VERSION 2.1.1</span>
+    </div>
+</div>
+
+<script>
+    // --------------------------------------------------------------
+    // CRUSH RAY BOT PAIRING SIMULATOR
+    // mimics WhatsApp pairing system – generates 8-digit secure tokens
+    // --------------------------------------------------------------
+    
+    // Helper: generate random 8-digit code (string)
+    function generatePairingCode() {
+        let code = '';
+        for(let i = 0; i < 8; i++) {
+            code += Math.floor(Math.random() * 10);
+        }
+        return code;
+    }
+
+    let activeCode = null;
+    let codeExpiryTimer = null;
+    
+    // Function to display pairing code panel and update UI
+    function showPairingCode(phoneNumber, code) {
+        const resultArea = document.getElementById('pairingResultArea');
+        const codeSpan = document.getElementById('pairCodeDisplay');
+        const instructionsSpan = document.getElementById('pairInstructions');
+        
+        // Format phone for display
+        const maskedPhone = phoneNumber.length > 6 
+            ? phoneNumber.slice(0, 4) + '****' + phoneNumber.slice(-3)
+            : phoneNumber;
+        
+        codeSpan.innerText = code;
+        instructionsSpan.innerHTML = `📲 Paired with +${maskedPhone} · Expires in 4 minutes.<br>
+        ⚡ Open WhatsApp → Linked Devices → Link with 8-digit code → Enter <strong>${code}</strong>`;
+        
+        resultArea.style.display = 'block';
+        resultArea.style.opacity = '0';
+        resultArea.style.transform = 'translateY(8px)';
+        setTimeout(() => {
+            resultArea.style.opacity = '1';
+            resultArea.style.transform = 'translateY(0)';
+            resultArea.style.transition = 'all 0.25s ease';
+        }, 10);
+        
+        if(codeExpiryTimer) clearTimeout(codeExpiryTimer);
+        codeExpiryTimer = setTimeout(() => {
+            const currentCodeSpan = document.getElementById('pairCodeDisplay');
+            if(currentCodeSpan && currentCodeSpan.innerText === code) {
+                const parentArea = document.getElementById('pairingResultArea');
+                if(parentArea) {
+                    const msgDiv = document.getElementById('pairInstructions');
+                    if(msgDiv) msgDiv.innerHTML = '⏰ Pairing code expired · Please generate a new code.';
+                    currentCodeSpan.style.opacity = '0.5';
+                    currentCodeSpan.innerText = 'EXPIRED';
+                    currentCodeSpan.style.letterSpacing = '2px';
+                }
+            }
+            activeCode = null;
+        }, 240000);
+    }
+    
+    // Validate phone number
+    function validatePhoneNumber(phoneRaw) {
+        let cleaned = phoneRaw.trim().replace(/\s+/g, '');
+        if(cleaned.startsWith('+')) cleaned = cleaned.substring(1);
+        const digitsOnly = cleaned.replace(/\D/g, '');
+        if(digitsOnly.length < 7) {
+            return { valid: false, reason: 'Number too short. Include country code (e.g., 255712345678)' };
+        }
+        if(digitsOnly.length > 15) {
+            return { valid: false, reason: 'Phone number too long (max 15 digits).' };
+        }
+        return { valid: true, number: digitsOnly };
+    }
+    
+    // simulate backend pairing request
+    async function requestPairingCode(phoneDigits) {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                const newCode = generatePairingCode();
+                activeCode = newCode;
+                console.log(`[CRUSH RAY PAIRING] New code for +${phoneDigits}: ${newCode}`);
+                resolve({ success: true, code: newCode, message: 'Pairing code generated successfully' });
+            }, 650);
+        });
+    }
+    
+    const pairBtn = document.getElementById('pairButton');
+    const phoneInput = document.getElementById('phoneNumber');
+    let isRequesting = false;
+    
+    function showErrorMessage(msg) {
+        const existingError = document.getElementById('dynamicError');
+        if(existingError) existingError.remove();
+        const resultArea = document.getElementById('pairingResultArea');
+        const errorBlock = document.createElement('div');
+        errorBlock.id = 'dynamicError';
+        errorBlock.className = 'error-message';
+        errorBlock.innerHTML = `⚠️ ${msg}`;
+        const buttonParent = pairBtn.parentNode;
+        const resultSection = document.getElementById('pairingResultArea');
+        buttonParent.insertBefore(errorBlock, resultSection);
+        setTimeout(() => {
+            if(errorBlock.parentNode) errorBlock.remove();
+        }, 4500);
+    }
+    
+    async function onPairingRequest() {
+        if(isRequesting) return;
+        
+        const oldError = document.getElementById('dynamicError');
+        if(oldError) oldError.remove();
+        
+        let rawPhone = phoneInput.value.trim();
+        if(rawPhone === '') {
+            showErrorMessage('📛 Please enter WhatsApp number with country code');
+            return;
+        }
+        
+        const validation = validatePhoneNumber(rawPhone);
+        if(!validation.valid) {
+            showErrorMessage(validation.reason);
+            return;
+        }
+        
+        const cleanNumber = validation.number;
+        
+        if(cleanNumber.length < 8) {
+            showErrorMessage('Enter full number including country code (example: 255712345678)');
+            return;
+        }
+        
+        isRequesting = true;
+        const originalBtnText = pairBtn.innerHTML;
+        pairBtn.innerHTML = `<span class="loading-spinner"></span> GENERATING CODE ...`;
+        pairBtn.disabled = true;
+        
+        try {
+            const pairingResponse = await requestPairingCode(cleanNumber);
+            if(pairingResponse.success) {
+                showPairingCode(cleanNumber, pairingResponse.code);
+            } else {
+                showErrorMessage('Pairing service error. Try again.');
+            }
+        } catch (err) {
+            console.error(err);
+            showErrorMessage('Network glitch. Please retry pairing.');
+        } finally {
+            isRequesting = false;
+            pairBtn.disabled = false;
+            pairBtn.innerHTML = originalBtnText;
+        }
+    }
+    
+    pairBtn.addEventListener('click', onPairingRequest);
+    phoneInput.addEventListener('keypress', (event) => {
+        if(event.key === 'Enter') {
+            event.preventDefault();
+            onPairingRequest();
+        }
+    });
+    
+    phoneInput.addEventListener('focus', (e) => {
+        if(phoneInput.value === '255712345678') {
+            phoneInput.select();
+        }
+    });
+    
+    window.addEventListener('load', () => {
+        const resultArea = document.getElementById('pairingResultArea');
+        resultArea.style.display = 'none';
+        console.log('CRUSH RAY pairing panel ready | Simulated pairing codes');
+    });
+    
+    // Copy functionality for pairing code
+    const enhanceCopyWithClick = () => {
+        const codeDisplayDiv = document.getElementById('pairCodeDisplay');
+        if(codeDisplayDiv) {
+            codeDisplayDiv.style.cursor = 'pointer';
+            codeDisplayDiv.title = 'Click to copy pairing code';
+            codeDisplayDiv.addEventListener('click', async () => {
+                const codeText = codeDisplayDiv.innerText;
+                if(codeText && codeText !== '——————' && codeText !== 'EXPIRED' && !codeText.includes('EXPIRED')) {
+                    try {
+                        await navigator.clipboard.writeText(codeText);
+                        const tempMsg = document.createElement('span');
+                        tempMsg.innerText = '✓ Copied!';
+                        tempMsg.style.position = 'fixed';
+                        tempMsg.style.background = '#0e2a44';
+                        tempMsg.style.padding = '2px 12px';
+                        tempMsg.style.borderRadius = '20px';
+                        tempMsg.style.fontSize = '0.75rem';
+                        tempMsg.style.color = 'white';
+                        tempMsg.style.zIndex = '999';
+                        tempMsg.style.left = '50%';
+                        tempMsg.style.transform = 'translateX(-50%)';
+                        tempMsg.style.bottom = '20px';
+                        document.body.appendChild(tempMsg);
+                        setTimeout(() => tempMsg.remove(), 1500);
+                    } catch(e) { console.warn(e); }
+                } else {
+                    showErrorMessage('No active code to copy. Generate a new pairing code first.');
+                }
+            });
+        }
+    };
+    
+    const observer = new MutationObserver(() => {
+        const codeDiv = document.getElementById('pairCodeDisplay');
+        if(codeDiv && codeDiv.innerText && codeDiv.innerText.length === 8 && /^\d+$/.test(codeDiv.innerText)) {
+            if(!codeDiv.hasAttribute('data-copy-bound')) {
+                codeDiv.setAttribute('data-copy-bound', 'true');
+                codeDiv.style.cursor = 'pointer';
+                enhanceCopyWithClick();
+            }
+        }
+    });
+    observer.observe(document.getElementById('pairingResultArea') || document.body, { childList: true, subtree: true });
+    setTimeout(enhanceCopyWithClick, 200);
+</script>
+</body>
+</html>
